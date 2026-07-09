@@ -3943,9 +3943,6 @@ static void split_partition_search(
     // Split partition evaluation of corresponding idx.
     // If the RD cost exceeds the best cost then do not
     // evaluate other split sub-partitions.
-#if CONFIG_ML_PART_SPLIT
-    int force_prune_flags[3] = { 0, 0, 0 };
-#endif  // CONFIG_ML_PART_SPLIT
     if (!av2_rd_pick_partition(
             cpi, td, tile_data, tp, mi_row + y_idx, mi_col + x_idx, subsize,
             PARTITION_SPLIT, &part_search_state->this_rdc, best_remain_rdcost,
@@ -3954,8 +3951,8 @@ static void split_partition_search(
             max_recursion_depth, NULL, NULL, multi_pass_mode, NULL
 #if CONFIG_ML_PART_SPLIT
             ,
-            force_prune_flags
-#endif  // CONFIG_ML_PART_SPLIT
+            NULL
+#endif
             )) {
       break;
     }
@@ -4052,22 +4049,18 @@ static int rd_try_subblock_new(AV2_COMP *const cpi, ThreadData *td,
                                SB_MULTI_PASS_MODE multi_pass_mode,
                                bool *skippable, int max_recursion_depth) {
   MACROBLOCK *const x = &td->mb;
-  const int orig_mult = x->rdmult;
   const int mi_row = rdo_data->mi_row;
   const int mi_col = rdo_data->mi_col;
   const BLOCK_SIZE bsize = rdo_data->bsize;
 
+  const int orig_mult = x->rdmult;
   setup_block_rdmult(cpi, x, mi_row, mi_col, bsize, NO_AQ, NULL);
-
   av2_rd_cost_update(x->rdmult, &best_rdcost);
 
   RD_STATS rdcost_remaining;
   av2_rd_stats_subtraction(x->rdmult, &best_rdcost, sum_rdc, &rdcost_remaining);
-  RD_STATS this_rdc;
 
-#if CONFIG_ML_PART_SPLIT
-  int force_prune_flags[3] = { 0, 0, 0 };
-#endif  // CONFIG_ML_PART_SPLIT
+  RD_STATS this_rdc;
   if (!av2_rd_pick_partition(cpi, td, tile_data, tp, mi_row, mi_col, bsize,
                              rdo_data->partition, &this_rdc, rdcost_remaining,
                              rdo_data->pc_tree, rdo_data->ptree_luma,
@@ -4075,10 +4068,11 @@ static int rd_try_subblock_new(AV2_COMP *const cpi, ThreadData *td,
                              NULL, multi_pass_mode, NULL
 #if CONFIG_ML_PART_SPLIT
                              ,
-                             force_prune_flags
-#endif  // CONFIG_ML_PART_SPLIT
+                             NULL
+#endif
                              )) {
     av2_invalid_rd_stats(sum_rdc);
+    x->rdmult = orig_mult;
     return 0;
   }
 
@@ -4091,14 +4085,8 @@ static int rd_try_subblock_new(AV2_COMP *const cpi, ThreadData *td,
     sum_rdc->dist += this_rdc.dist;
     av2_rd_cost_update(x->rdmult, sum_rdc);
   }
-
-  if (sum_rdc->rdcost >= best_rdcost.rdcost) {
-    x->rdmult = orig_mult;
-    return 0;
-  }
-
   x->rdmult = orig_mult;
-  return 1;
+  return sum_rdc->rdcost < best_rdcost.rdcost;
 }
 
 static AVM_INLINE PC_TREE *const *get_child_pc_trees(
@@ -4562,21 +4550,22 @@ static INLINE void search_intra_region_partitioning(
     TileDataEnc *tile_data, TokenExtra **tp, RD_STATS *best_rdc,
     PC_TREE *pc_tree, const PARTITION_TREE *ptree_luma,
     const PARTITION_TREE *template_tree, RD_SEARCH_MACROBLOCK_CONTEXT *x_ctx,
-    PartitionSearchState *part_search_state, LevelBanksRDO *level_banks,
-    SB_MULTI_PASS_MODE multi_pass_mode, int max_recursion_depth,
-    PARTITION_TYPE parent_partition) {
+    const PartitionSearchState *part_search_state, LevelBanksRDO *level_banks,
+    const SB_MULTI_PASS_MODE multi_pass_mode, const int max_recursion_depth,
+    const PARTITION_TYPE parent_partition) {
   const AV2_COMMON *const cm = &cpi->common;
   MACROBLOCK *const x = &td->mb;
   const int num_planes = av2_num_planes(cm);
   MACROBLOCKD *const xd = &x->e_mbd;
   assert(pc_tree != NULL);
 
-  // Add one encoder fast method for early terminating inter-sdp
+  // TODO: add one encoder fast method for early terminating inter-sdp
+
+  // if over 70% of the coded blocks under this region are inter coded blocks,
+  // skip the rdo for inter-sdp
   float total_count = 0;
   float inter_mode_count = 0;
   early_termination_inter_sdp(pc_tree, &total_count, &inter_mode_count);
-  // if over 60% of the coded blocks under this region are inter coded blocks,
-  // skip the rdo for inter-sdp
   if (total_count * 0.7 < inter_mode_count) return;
 
   pc_tree->region_type = INTRA_REGION;
@@ -4584,35 +4573,30 @@ static INLINE void search_intra_region_partitioning(
   PARTITION_TYPE cur_best_partitioning = pc_tree->partitioning;
   pc_tree->partitioning = PARTITION_NONE;
 
-  RD_STATS *sum_rdc = &part_search_state->sum_rdc;
+  RD_STATS *sum_rdc = &search_state->sum_rdc;
   av2_init_rd_stats(sum_rdc);
-
   sum_rdc->rate = part_search_state->region_type_cost[pc_tree->region_type];
   sum_rdc->rdcost = RDCOST(x->rdmult, sum_rdc->rate, 0);
 
   RD_STATS best_remain_rdcost;
-
   av2_rd_stats_subtraction(x->rdmult, best_rdc, sum_rdc, &best_remain_rdcost);
 
-  const PartitionBlkParams *blk_params = &search_state->part_blk_params;
-  const int mi_row = blk_params->mi_row, mi_col = blk_params->mi_col;
+  const PartitionBlkParams *blk_params = &part_search_state->part_blk_params;
+  const int mi_row = blk_params->mi_row;
+  const int mi_col = blk_params->mi_col;
   const BLOCK_SIZE bsize = blk_params->bsize;
-
   RD_STATS this_rdc;
   av2_init_rd_stats(&this_rdc);
 
   // Encoder RDO for luma component in intra region
   xd->tree_type = LUMA_PART;
-#if CONFIG_ML_PART_SPLIT
-  int force_prune_flags[3] = { 0, 0, 0 };
-#endif  // CONFIG_ML_PART_SPLIT
   if (!av2_rd_pick_partition(
           cpi, td, tile_data, tp, mi_row, mi_col, bsize, parent_partition,
           &this_rdc, best_remain_rdcost, pc_tree, ptree_luma, template_tree,
           max_recursion_depth, NULL, NULL, multi_pass_mode, NULL
 #if CONFIG_ML_PART_SPLIT
           ,
-          force_prune_flags
+          NULL
 #endif  // CONFIG_ML_PART_SPLIT
           )) {
     av2_invalid_rd_stats(&this_rdc);
@@ -4633,7 +4617,7 @@ static INLINE void search_intra_region_partitioning(
             max_recursion_depth, NULL, NULL, multi_pass_mode, NULL
 #if CONFIG_ML_PART_SPLIT
             ,
-            force_prune_flags
+            NULL
 #endif  // CONFIG_ML_PART_SPLIT
             )) {
       av2_invalid_rd_stats(&this_rdc);
