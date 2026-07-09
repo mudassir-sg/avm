@@ -4230,152 +4230,31 @@ static AVM_INLINE void trace_partition_boundary(bool *partition_boundaries,
   mi_row &= MAX_MIB_MASK;
   mi_col &= MAX_MIB_MASK;
   const PARTITION_TYPE partition = pc_tree->partitioning;
-  assert(bsize < BLOCK_SIZES_ALL);
   const int mi_width = mi_size_wide[bsize];
   const int mi_height = mi_size_high[bsize];
-  const int ebs_w = mi_size_wide[bsize] / 8;
-  const int ebs_h = mi_size_high[bsize] / 8;
-  const BLOCK_SIZE subsize = get_partition_subsize(bsize, partition);
-  REGION_TYPE cur_region_type = pc_tree->region_type;
-  switch (partition) {
-    case PARTITION_NONE:
-      for (int col = 0; col < mi_width; col++) {
-        partition_boundaries[(mi_row + mi_height - 1) * MAX_MIB_SIZE +
-                             (mi_col + col)] |= (1 << HORZ);
-      }
-      for (int row = 0; row < mi_height; row++) {
-        partition_boundaries[(mi_row + row) * MAX_MIB_SIZE + mi_col + mi_width -
-                             1] |= (1 << VERT);
-      }
-      break;
-    case PARTITION_HORZ:
-      trace_partition_boundary(
-          partition_boundaries, pc_tree->horizontal[cur_region_type][0], mi_row,
-          mi_col, get_partition_subsize(bsize, PARTITION_HORZ));
-      trace_partition_boundary(partition_boundaries,
-                               pc_tree->horizontal[cur_region_type][1],
-                               mi_row + mi_height / 2, mi_col,
-                               get_partition_subsize(bsize, PARTITION_HORZ));
-      break;
-    case PARTITION_VERT:
-      trace_partition_boundary(
-          partition_boundaries, pc_tree->vertical[cur_region_type][0], mi_row,
-          mi_col, get_partition_subsize(bsize, PARTITION_VERT));
-      trace_partition_boundary(
-          partition_boundaries, pc_tree->vertical[cur_region_type][1], mi_row,
-          mi_col + mi_width / 2, get_partition_subsize(bsize, PARTITION_VERT));
-      break;
-    case PARTITION_HORZ_3:
-      trace_partition_boundary(
-          partition_boundaries, pc_tree->horizontal3[cur_region_type][0],
-          mi_row, mi_col, get_h_partition_subsize(bsize, 0, PARTITION_HORZ_3));
-      trace_partition_boundary(
-          partition_boundaries, pc_tree->horizontal3[cur_region_type][1],
-          mi_row + mi_height / 4, mi_col,
-          get_h_partition_subsize(bsize, 1, PARTITION_HORZ_3));
-      trace_partition_boundary(
-          partition_boundaries, pc_tree->horizontal3[cur_region_type][2],
-          mi_row + mi_height / 4, mi_col + mi_width / 2,
-          get_h_partition_subsize(bsize, 1, PARTITION_HORZ_3));
-      trace_partition_boundary(
-          partition_boundaries, pc_tree->horizontal3[cur_region_type][3],
-          mi_row + 3 * mi_height / 4, mi_col,
-          get_h_partition_subsize(bsize, 0, PARTITION_HORZ_3));
-      break;
-    case PARTITION_VERT_3:
-      trace_partition_boundary(
-          partition_boundaries, pc_tree->vertical3[cur_region_type][0], mi_row,
-          mi_col, get_h_partition_subsize(bsize, 0, PARTITION_VERT_3));
-      trace_partition_boundary(
-          partition_boundaries, pc_tree->vertical3[cur_region_type][1], mi_row,
-          mi_col + mi_width / 4,
-          get_h_partition_subsize(bsize, 1, PARTITION_VERT_3));
-      trace_partition_boundary(
-          partition_boundaries, pc_tree->vertical3[cur_region_type][2],
-          mi_row + mi_height / 2, mi_col + mi_width / 4,
-          get_h_partition_subsize(bsize, 1, PARTITION_VERT_3));
-      trace_partition_boundary(
-          partition_boundaries, pc_tree->vertical3[cur_region_type][3], mi_row,
-          mi_col + 3 * mi_width / 4,
-          get_h_partition_subsize(bsize, 0, PARTITION_VERT_3));
-      break;
-    case PARTITION_HORZ_4A: {
-      const BLOCK_SIZE bsize_big = get_partition_subsize(bsize, PARTITION_HORZ);
-      assert(bsize_big < BLOCK_SIZES_ALL);
-      const BLOCK_SIZE bsize_med = subsize_lookup[PARTITION_HORZ][bsize_big];
-      assert(subsize == subsize_lookup[PARTITION_HORZ][bsize_med]);
-      trace_partition_boundary(partition_boundaries,
-                               pc_tree->horizontal4a[cur_region_type][0],
-                               mi_row, mi_col, subsize);
-      trace_partition_boundary(partition_boundaries,
-                               pc_tree->horizontal4a[cur_region_type][1],
-                               mi_row + ebs_h, mi_col, bsize_med);
-      trace_partition_boundary(partition_boundaries,
-                               pc_tree->horizontal4a[cur_region_type][2],
-                               mi_row + 3 * ebs_h, mi_col, bsize_big);
-      trace_partition_boundary(partition_boundaries,
-                               pc_tree->horizontal4a[cur_region_type][3],
-                               mi_row + 7 * ebs_h, mi_col, subsize);
-      break;
+
+  if (partition == PARTITION_NONE) {
+    for (int col = 0; col < mi_width; col++) {
+      partition_boundaries[(mi_row + mi_height - 1) * MAX_MIB_SIZE +
+                           (mi_col + col)] |= (1 << HORZ);
     }
-    case PARTITION_HORZ_4B: {
-      const BLOCK_SIZE bsize_big = get_partition_subsize(bsize, PARTITION_HORZ);
-      assert(bsize_big < BLOCK_SIZES_ALL);
-      const BLOCK_SIZE bsize_med = subsize_lookup[PARTITION_HORZ][bsize_big];
-      assert(subsize == subsize_lookup[PARTITION_HORZ][bsize_med]);
-      trace_partition_boundary(partition_boundaries,
-                               pc_tree->horizontal4b[cur_region_type][0],
-                               mi_row, mi_col, subsize);
-      trace_partition_boundary(partition_boundaries,
-                               pc_tree->horizontal4b[cur_region_type][1],
-                               mi_row + ebs_h, mi_col, bsize_big);
-      trace_partition_boundary(partition_boundaries,
-                               pc_tree->horizontal4b[cur_region_type][2],
-                               mi_row + 5 * ebs_h, mi_col, bsize_med);
-      trace_partition_boundary(partition_boundaries,
-                               pc_tree->horizontal4b[cur_region_type][3],
-                               mi_row + 7 * ebs_h, mi_col, subsize);
-      break;
+    for (int row = 0; row < mi_height; row++) {
+      partition_boundaries[(mi_row + row) * MAX_MIB_SIZE + mi_col + mi_width -
+                           1] |= (1 << VERT);
     }
-    case PARTITION_VERT_4A: {
-      const BLOCK_SIZE bsize_big = get_partition_subsize(bsize, PARTITION_VERT);
-      assert(bsize_big < BLOCK_SIZES_ALL);
-      const BLOCK_SIZE bsize_med = subsize_lookup[PARTITION_VERT][bsize_big];
-      assert(subsize == subsize_lookup[PARTITION_VERT][bsize_med]);
-      trace_partition_boundary(partition_boundaries,
-                               pc_tree->vertical4a[cur_region_type][0], mi_row,
-                               mi_col, subsize);
-      trace_partition_boundary(partition_boundaries,
-                               pc_tree->vertical4a[cur_region_type][1], mi_row,
-                               mi_col + ebs_w, bsize_med);
-      trace_partition_boundary(partition_boundaries,
-                               pc_tree->vertical4a[cur_region_type][2], mi_row,
-                               mi_col + 3 * ebs_w, bsize_big);
-      trace_partition_boundary(partition_boundaries,
-                               pc_tree->vertical4a[cur_region_type][3], mi_row,
-                               mi_col + 7 * ebs_w, subsize);
-      break;
+  } else {
+    int num_sub_parts = 0;
+    PC_TREE *const *child_nodes = get_child_pc_trees(
+        pc_tree, pc_tree->partitioning, pc_tree->region_type, &num_sub_parts);
+
+    int mi_rows[4], mi_cols[4];
+    BLOCK_SIZE subblock_sizes[4];
+    get_partition_subblock_layout(pc_tree->partitioning, bsize, mi_row, mi_col,
+                                  subblock_sizes, mi_rows, mi_cols);
+    for (int i = 0; i < num_sub_parts; ++i) {
+      trace_partition_boundary(partition_boundaries, child_nodes[i], mi_rows[i],
+                               mi_cols[i], subblock_sizes[i]);
     }
-    case PARTITION_VERT_4B: {
-      const BLOCK_SIZE bsize_big = get_partition_subsize(bsize, PARTITION_VERT);
-      assert(bsize_big < BLOCK_SIZES_ALL);
-      const BLOCK_SIZE bsize_med = subsize_lookup[PARTITION_VERT][bsize_big];
-      assert(subsize == subsize_lookup[PARTITION_VERT][bsize_med]);
-      trace_partition_boundary(partition_boundaries,
-                               pc_tree->vertical4b[cur_region_type][0], mi_row,
-                               mi_col, subsize);
-      trace_partition_boundary(partition_boundaries,
-                               pc_tree->vertical4b[cur_region_type][1], mi_row,
-                               mi_col + ebs_w, bsize_big);
-      trace_partition_boundary(partition_boundaries,
-                               pc_tree->vertical4b[cur_region_type][2], mi_row,
-                               mi_col + 5 * ebs_w, bsize_med);
-      trace_partition_boundary(partition_boundaries,
-                               pc_tree->vertical4b[cur_region_type][3], mi_row,
-                               mi_col + 7 * ebs_w, subsize);
-      break;
-    }
-    default: assert(0 && "Invalid partition type in trace_partition_boundary!");
   }
 }
 
@@ -4654,9 +4533,11 @@ static AVM_INLINE void prune_ext_partitions_3way(
 }
 
 // Early termination of SDP for intra blocks in inter frames
-static INLINE void early_termination_inter_sdp(PC_TREE *pc_tree,
+static INLINE void early_termination_inter_sdp(const PC_TREE *pc_tree,
                                                float *total_count,
                                                float *inter_mode_count) {
+  if (pc_tree == NULL) return;
+
   REGION_TYPE cur_region_type = pc_tree->region_type;
   if (pc_tree->partitioning == PARTITION_NONE) {
     if (pc_tree->none[cur_region_type] == NULL) return;
@@ -4664,82 +4545,14 @@ static INLINE void early_termination_inter_sdp(PC_TREE *pc_tree,
     if (mi == NULL) return;
     *total_count += 1;
     if (mi->mode >= NEARMV && mi->mode < MB_MODE_COUNT) *inter_mode_count += 1;
-    return;
-  }
-  switch (pc_tree->partitioning) {
-    case PARTITION_HORZ:
-      early_termination_inter_sdp(pc_tree->horizontal[cur_region_type][0],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->horizontal[cur_region_type][1],
-                                  total_count, inter_mode_count);
-      break;
-    case PARTITION_VERT:
-      early_termination_inter_sdp(pc_tree->vertical[cur_region_type][0],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->vertical[cur_region_type][1],
-                                  total_count, inter_mode_count);
-      break;
-    case PARTITION_HORZ_4A:
-      early_termination_inter_sdp(pc_tree->horizontal4a[cur_region_type][0],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->horizontal4a[cur_region_type][1],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->horizontal4a[cur_region_type][2],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->horizontal4a[cur_region_type][3],
-                                  total_count, inter_mode_count);
-      break;
-    case PARTITION_HORZ_4B:
-      early_termination_inter_sdp(pc_tree->horizontal4b[cur_region_type][0],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->horizontal4b[cur_region_type][1],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->horizontal4b[cur_region_type][2],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->horizontal4b[cur_region_type][3],
-                                  total_count, inter_mode_count);
-      break;
-    case PARTITION_VERT_4A:
-      early_termination_inter_sdp(pc_tree->vertical4a[cur_region_type][0],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->vertical4a[cur_region_type][1],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->vertical4a[cur_region_type][2],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->vertical4a[cur_region_type][3],
-                                  total_count, inter_mode_count);
-      break;
-    case PARTITION_VERT_4B:
-      early_termination_inter_sdp(pc_tree->vertical4b[cur_region_type][0],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->vertical4b[cur_region_type][1],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->vertical4b[cur_region_type][2],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->vertical4b[cur_region_type][3],
-                                  total_count, inter_mode_count);
-      break;
-    case PARTITION_HORZ_3:
-      early_termination_inter_sdp(pc_tree->horizontal3[cur_region_type][0],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->horizontal3[cur_region_type][1],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->horizontal3[cur_region_type][2],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->horizontal3[cur_region_type][3],
-                                  total_count, inter_mode_count);
-      break;
-    case PARTITION_VERT_3:
-      early_termination_inter_sdp(pc_tree->vertical3[cur_region_type][0],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->vertical3[cur_region_type][1],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->vertical3[cur_region_type][2],
-                                  total_count, inter_mode_count);
-      early_termination_inter_sdp(pc_tree->vertical3[cur_region_type][3],
-                                  total_count, inter_mode_count);
-      break;
-    default: break;
+  } else {
+    int num_sub_parts = 0;
+    PC_TREE *const *child_nodes = get_child_pc_trees(
+        pc_tree, pc_tree->partitioning, pc_tree->region_type, &num_sub_parts);
+    for (int i = 0; i < num_sub_parts; ++i) {
+      early_termination_inter_sdp(child_nodes[i], total_count,
+                                  inter_mode_count);
+    }
   }
 }
 
@@ -5251,82 +5064,16 @@ static AVM_INLINE int get_partition_depth(const PC_TREE *pc_tree,
                                           int curr_depth) {
   if (pc_tree == NULL) return curr_depth;
   const PARTITION_TYPE partition = pc_tree->partitioning;
+  if (partition == PARTITION_NONE) return curr_depth;
+
+  int num_sub_parts = 0;
+  PC_TREE *const *child_nodes = get_child_pc_trees(
+      pc_tree, partition, pc_tree->region_type, &num_sub_parts);
+  const int depth_inc = (partition == PARTITION_SPLIT) ? 2 : 1;
   int max_depth = curr_depth;
-  int cur_region_type = pc_tree->region_type;
-  switch (partition) {
-    case PARTITION_NONE: break;
-    case PARTITION_SPLIT:
-      for (int idx = 0; idx < 4; idx++) {
-        max_depth = AVMMAX(
-            max_depth, get_partition_depth(pc_tree->split[cur_region_type][idx],
-                                           curr_depth + 2));
-      }
-      break;
-    case PARTITION_HORZ:
-      for (int idx = 0; idx < 2; idx++) {
-        max_depth = AVMMAX(
-            max_depth,
-            get_partition_depth(pc_tree->horizontal[cur_region_type][idx],
-                                curr_depth + 1));
-      }
-      break;
-    case PARTITION_VERT:
-      for (int idx = 0; idx < 2; idx++) {
-        max_depth =
-            AVMMAX(max_depth,
-                   get_partition_depth(pc_tree->vertical[cur_region_type][idx],
-                                       curr_depth + 1));
-      }
-      break;
-    case PARTITION_HORZ_3:
-      for (int idx = 0; idx < 4; idx++) {
-        max_depth = AVMMAX(
-            max_depth,
-            get_partition_depth(pc_tree->horizontal3[cur_region_type][idx],
-                                curr_depth + 1));
-      }
-      break;
-    case PARTITION_VERT_3:
-      for (int idx = 0; idx < 4; idx++) {
-        max_depth =
-            AVMMAX(max_depth,
-                   get_partition_depth(pc_tree->vertical3[cur_region_type][idx],
-                                       curr_depth + 1));
-      }
-      break;
-    case PARTITION_HORZ_4A:
-      for (int idx = 0; idx < 4; idx++) {
-        max_depth = AVMMAX(
-            max_depth,
-            get_partition_depth(pc_tree->horizontal4a[cur_region_type][idx],
-                                curr_depth + 1));
-      }
-      break;
-    case PARTITION_HORZ_4B:
-      for (int idx = 0; idx < 4; idx++) {
-        max_depth = AVMMAX(
-            max_depth,
-            get_partition_depth(pc_tree->horizontal4b[cur_region_type][idx],
-                                curr_depth + 1));
-      }
-      break;
-    case PARTITION_VERT_4A:
-      for (int idx = 0; idx < 4; idx++) {
-        max_depth = AVMMAX(
-            max_depth,
-            get_partition_depth(pc_tree->vertical4a[cur_region_type][idx],
-                                curr_depth + 1));
-      }
-      break;
-    case PARTITION_VERT_4B:
-      for (int idx = 0; idx < 4; idx++) {
-        max_depth = AVMMAX(
-            max_depth,
-            get_partition_depth(pc_tree->vertical4b[cur_region_type][idx],
-                                curr_depth + 1));
-      }
-      break;
-    default: assert(0); break;
+  for (int i = 0; i < num_sub_parts; ++i) {
+    max_depth = AVMMAX(
+        max_depth, get_partition_depth(child_nodes[i], curr_depth + depth_inc));
   }
   return max_depth;
 }
